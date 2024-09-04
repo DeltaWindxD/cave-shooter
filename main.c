@@ -4,9 +4,9 @@
 #include <stdio.h>
 #include <math.h>
 
-#define MAX_BULLETS 12
+#define MAX_ENEMY_BULLETS 12
+#define MAX_PLAYER_BULLETS 512
 #define INVINCIBILITY_DURATION 1.0f
-#define GUN_COOLDOWN 0.5f
 
 int PLAYER_LIFE = 3;
 bool isGameOver = false;
@@ -22,7 +22,13 @@ typedef struct
 {
     Vector2 position;
     float velocity;
-} bullet_t;
+} player_bullet_t;
+
+typedef struct
+{
+    Vector2 position;
+    float velocity;
+} enemy_bullet_t;
 
 typedef struct
 {
@@ -30,97 +36,107 @@ typedef struct
     float velocity;
     PlayerState state;
     float invincibility_timer; // Tracks the invincibility duration
+    float shoot_cooldown;
+    float shoot_cooldown_duration;
 } player_t;
 
 player_t player = {
     .position.x = 400,
     .position.y = 550,
-    .velocity = 400,
+    .velocity = 430,
     .state = IDLE,
-    .invincibility_timer = 0};
+    .invincibility_timer = 0,
+    .shoot_cooldown = 0,
+    .shoot_cooldown_duration = 0.08f};
 
-bullet_t bullets[MAX_BULLETS];
-int bullet_count = 0;
+player_bullet_t player_bullets[MAX_PLAYER_BULLETS];
+enemy_bullet_t enemy_bullets[MAX_ENEMY_BULLETS];
+
+int player_bullet_count = 0;
+int enemy_bullet_count = 0;
 
 void shoot_bullets()
 {
-
-    bullets[bullet_count].position = (Vector2){player.position.x, player.position.y - 20}; // Slightly above the player
-    bullets[bullet_count].velocity = -600.0f;                                              // Bullets go upwards
-
-    bullet_count++;
+    player_bullets[player_bullet_count].position = (Vector2){player.position.x, player.position.y - 20}; // Slightly above the player
+    player_bullets[player_bullet_count].velocity = -600.0f;
+    player_bullet_count++;
 }
 
 void bullets_spawn()
 {
-    if (bullet_count < MAX_BULLETS)
+    if (enemy_bullet_count < MAX_ENEMY_BULLETS)
     {
         float random_pos_x = (float)(rand() % 800);             // Random x-position between 0 and 800
         float random_velocity = 200.0f + (float)(rand() % 100); // Random velocity between 200 and 300
 
-        bullets[bullet_count].position = (Vector2){random_pos_x, 5.0f}; // Start at the top of the screen
-        bullets[bullet_count].velocity = random_velocity;
+        enemy_bullets[enemy_bullet_count].position = (Vector2){random_pos_x, 5.0f}; // Start at the top of the screen
+        enemy_bullets[enemy_bullet_count].velocity = random_velocity;
 
-        bullet_count++;
+        enemy_bullet_count++;
     }
 }
 
 void update_bullets(float delta_time)
 {
-    for (int i = 0; i < bullet_count; i++)
+    // Update player bullets
+    for (int i = 0; i < player_bullet_count; i++)
     {
-        // Movement for bullet
-        bullets[i].position.y += bullets[i].velocity * delta_time;
+        player_bullets[i].position.y += player_bullets[i].velocity * delta_time;
 
         // Reset bullet if it goes off screen
-        if (bullets[i].position.y < 0 || bullets[i].position.y > 600) // If off screen, remove bullet
+        if (player_bullets[i].position.y < 0)
         {
-            bullets[i] = bullets[bullet_count - 1]; // Move the last bullet to the current position
-            bullet_count--;
+            player_bullets[i] = player_bullets[player_bullet_count - 1];
+            player_bullet_count--;
             i--;
             continue;
         }
 
         // Check collision between player bullets and falling bullets
-        if (bullets[i].velocity < 0) // Only check for upward bullets
+        for (int j = 0; j < enemy_bullet_count; j++)
         {
-            for (int j = 0; j < bullet_count; j++)
+            float collision = CheckCollisionCircles(player_bullets[i].position, 5, enemy_bullets[j].position, 5);
+
+            if (collision)
             {
-                if (bullets[j].velocity > 0) // Only check for downward bullets
-                {
-                    float collision = CheckCollisionCircles(bullets[i].position, 5, bullets[j].position, 5);
+                // Add points for destroyed bullet
+                SCORE += 10;
 
-                    if (collision)
-                    {
-                        // Add points for destroyed bullet
-                        SCORE += 10;
+                // Remove both bullets
+                player_bullets[i] = player_bullets[player_bullet_count - 1];
+                player_bullet_count--;
 
-                        // Remove both bullets
-                        bullets[i] = bullets[bullet_count - 1];
-                        bullet_count--;
-                        i--;
+                enemy_bullets[j] = enemy_bullets[enemy_bullet_count - 1];
+                enemy_bullet_count--;
 
-                        bullets[j] = bullets[bullet_count - 1];
-                        bullet_count--;
-                        j--;
-
-                        break;
-                    }
-                }
+                i--;
+                break;
             }
+        }
+    }
+
+    // Update falling bullets
+    for (int i = 0; i < enemy_bullet_count; i++)
+    {
+        enemy_bullets[i].position.y += enemy_bullets[i].velocity * delta_time;
+
+        // Reset bullet if it goes off screen
+        if (enemy_bullets[i].position.y > 600)
+        {
+            enemy_bullets[i] = enemy_bullets[enemy_bullet_count - 1];
+            enemy_bullet_count--;
+            i--;
+            continue;
         }
 
         // Check collision with player
-        if (bullets[i].velocity > 0) // Only check collision for downward bullets
-        {
-            float collision_player = CheckCollisionCircles(bullets[i].position, 5, player.position, 15);
+        float collision_player = CheckCollisionCircles(enemy_bullets[i].position, 5, player.position, 15);
 
-            if (player.state == IDLE && collision_player) // Player radius (15) + bullet radius (5)
-            {
-                player.state = HURT;
-                player.invincibility_timer = INVINCIBILITY_DURATION;
-                PLAYER_LIFE--;
-            }
+        if (player.state == IDLE && collision_player) // Player radius (15) + bullet radius (5)
+        {
+            player.state = HURT;
+            player.invincibility_timer = INVINCIBILITY_DURATION;
+            PLAYER_LIFE--;
 
             if (PLAYER_LIFE <= 0)
             {
@@ -140,6 +156,16 @@ void update_player(float delta_time)
         {
             player.state = IDLE;
             player.invincibility_timer = 0;
+        }
+    }
+
+    if (player.shoot_cooldown > 0)
+    {
+        player.shoot_cooldown -= delta_time;
+
+        if (player.shoot_cooldown < 0)
+        {
+            player.shoot_cooldown = 0;
         }
     }
 
@@ -166,9 +192,10 @@ void update_player(float delta_time)
         movement.y += 1.0f;
     }
 
-    if (IsKeyPressed(KEY_SPACE))
+    if (IsKeyDown(KEY_SPACE) && player.shoot_cooldown == 0)
     {
         shoot_bullets();
+        player.shoot_cooldown = player.shoot_cooldown_duration;
     }
 
     // Normalize the movement vector if moving diagonally
@@ -188,7 +215,6 @@ int main()
     InitWindow(800, 600, "Demo");
 
     srand(time(NULL));
-
     SetTargetFPS(60);
     while (!WindowShouldClose())
     {
@@ -221,9 +247,11 @@ int main()
             {
                 // Reset the game state
                 PLAYER_LIFE = 3;
-                bullet_count = 0;
+                player_bullet_count = 0;
+                enemy_bullet_count = 0;
                 player.position = (Vector2){400, 550};
                 player.state = IDLE;
+                player.shoot_cooldown = 0;
                 isGameOver = false;
                 SCORE = 0;
             }
@@ -234,21 +262,19 @@ int main()
             Color player_color = (player.state == HURT && (int)(player.invincibility_timer * 10) % 2 == 0) ? YELLOW : WHITE;
             DrawCircleV(player.position, 15, player_color);
 
-            // Draw bullets
-            for (int i = 0; i < bullet_count; i++)
+            // Draw Player bullets
+            for (int i = 0; i < player_bullet_count; i++)
             {
-                if (bullets[i].velocity < 0)
-                {
-                    Vector2 tip = {bullets[i].position.x, bullets[i].position.y - 10};
-                    Vector2 left = {bullets[i].position.x - 5, bullets[i].position.y};
-                    Vector2 right = {bullets[i].position.x + 5, bullets[i].position.y};
+                Vector2 tip = {player_bullets[i].position.x, player_bullets[i].position.y - 10};
+                Vector2 left = {player_bullets[i].position.x - 5, player_bullets[i].position.y};
+                Vector2 right = {player_bullets[i].position.x + 5, player_bullets[i].position.y};
 
-                    DrawTriangle(tip, left, right, YELLOW);
-                }
-                else
-                {
-                    DrawCircleV(bullets[i].position, 9, RED);
-                }
+                DrawTriangle(tip, left, right, YELLOW);
+            }
+
+            for (int i = 0; i < enemy_bullet_count; i++)
+            {
+                DrawCircleV(enemy_bullets[i].position, 9, RED);
             }
 
             DrawText(TextFormat("Health: %d", PLAYER_LIFE), 8, 15, 30, WHITE);
