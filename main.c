@@ -9,6 +9,8 @@
 #define GUN_COOLDOWN 0.5f
 
 int PLAYER_LIFE = 3;
+bool isGameOver = false;
+int SCORE = 0;
 
 typedef enum
 {
@@ -90,6 +92,8 @@ void update_bullets(float delta_time)
 
                     if (collision)
                     {
+                        // Add points for destroyed bullet
+                        SCORE += 10;
 
                         // Remove both bullets
                         bullets[i] = bullets[bullet_count - 1];
@@ -114,8 +118,13 @@ void update_bullets(float delta_time)
             if (player.state == IDLE && collision_player) // Player radius (15) + bullet radius (5)
             {
                 player.state = HURT;
-                player.invincibility_timer = INVINCIBILITY_DURATION; // Start invincibility
-                PLAYER_LIFE--;                                       // Reduce player life
+                player.invincibility_timer = INVINCIBILITY_DURATION;
+                PLAYER_LIFE--;
+            }
+
+            if (PLAYER_LIFE <= 0)
+            {
+                isGameOver = true; // Trigger game over when lives reach 0
             }
         }
     }
@@ -185,48 +194,67 @@ int main()
     {
         float delta_time = GetFrameTime();
 
-        // Update the player state and position
-        update_player(delta_time);
+        if (!isGameOver)
+        {
+            // Update the player state and position
+            update_player(delta_time);
 
-        // Spawn a new bullet every frame
-        bullets_spawn();
+            // Spawn a new bullet every frame
+            bullets_spawn();
 
-        // Update the bullets
-        update_bullets(delta_time);
+            // Update the bullets
+            update_bullets(delta_time);
+        }
 
         // Drawing
         BeginDrawing();
         ClearBackground(BLACK);
 
-        // Draw the player
-        Color player_color = (player.state == HURT && (int)(player.invincibility_timer * 10) % 2 == 0) ? YELLOW : WHITE;
-        DrawCircleV(player.position, 15, player_color);
-
-        // Draw bullets
-        for (int i = 0; i < bullet_count; i++)
+        if (isGameOver)
         {
-            if (bullets[i].velocity < 0) // Only draw triangles for upward-shooting bullets
-            {
+            DrawText("GAME OVER", 250, 250, 50, RED);
+            DrawText(TextFormat("Your score was: %d", SCORE), 300, 300, 20, WHITE);
+            DrawText("Press [ENTER] to Restart", 200, 350, 30, WHITE);
 
-                Vector2 tip = {bullets[i].position.x, bullets[i].position.y - 10};
-                Vector2 left = {bullets[i].position.x - 5, bullets[i].position.y};
-                Vector2 right = {bullets[i].position.x + 5, bullets[i].position.y};
-
-                DrawTriangle(tip, left, right, YELLOW);
-            }
-            else
+            // Allows the user to restart the game
+            if (IsKeyPressed(KEY_ENTER))
             {
-                DrawCircleV(bullets[i].position, 9, RED);
+                // Reset the game state
+                PLAYER_LIFE = 3;
+                bullet_count = 0;
+                player.position = (Vector2){400, 550};
+                player.state = IDLE;
+                isGameOver = false;
+                SCORE = 0;
             }
         }
-
-        DrawText(TextFormat("Health: %d", PLAYER_LIFE), 8, 15, 30, WHITE);
-
-        if (PLAYER_LIFE <= 0)
+        else
         {
-            SetTargetFPS(NULL);
-            DrawText("GAME OVER", 200, 200, 50, RED);
+            // Draw the player
+            Color player_color = (player.state == HURT && (int)(player.invincibility_timer * 10) % 2 == 0) ? YELLOW : WHITE;
+            DrawCircleV(player.position, 15, player_color);
+
+            // Draw bullets
+            for (int i = 0; i < bullet_count; i++)
+            {
+                if (bullets[i].velocity < 0)
+                {
+                    Vector2 tip = {bullets[i].position.x, bullets[i].position.y - 10};
+                    Vector2 left = {bullets[i].position.x - 5, bullets[i].position.y};
+                    Vector2 right = {bullets[i].position.x + 5, bullets[i].position.y};
+
+                    DrawTriangle(tip, left, right, YELLOW);
+                }
+                else
+                {
+                    DrawCircleV(bullets[i].position, 9, RED);
+                }
+            }
+
+            DrawText(TextFormat("Health: %d", PLAYER_LIFE), 8, 15, 30, WHITE);
+            DrawText(TextFormat("Score: %d", SCORE), 620, 15, 30, WHITE);
         }
+
         EndDrawing();
     }
 
