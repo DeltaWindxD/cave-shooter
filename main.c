@@ -172,22 +172,22 @@ void update_player(float delta_time)
     Vector2 movement = {0.0f, 0.0f};
 
     // Input
-    if (IsKeyDown(KEY_RIGHT))
+    if (IsKeyDown(KEY_RIGHT) && player.position.x < GetScreenWidth() - 15)
     {
         movement.x += 1.0f;
     }
 
-    if (IsKeyDown(KEY_LEFT))
+    if (IsKeyDown(KEY_LEFT) && player.position.x > 15)
     {
         movement.x -= 1.0f;
     }
 
-    if (IsKeyDown(KEY_UP))
+    if (IsKeyDown(KEY_UP) && player.position.y > 15)
     {
         movement.y -= 1.0f;
     }
 
-    if (IsKeyDown(KEY_DOWN))
+    if (IsKeyDown(KEY_DOWN) && player.position.y < GetScreenHeight() - 15)
     {
         movement.y += 1.0f;
     }
