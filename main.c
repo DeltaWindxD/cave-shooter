@@ -11,6 +11,8 @@
 int PLAYER_LIFE = 3;
 bool isGameOver = false;
 int SCORE = 0;
+int score_threshold = 350;
+int bullets_to_spawn = 10;
 
 typedef enum
 {
@@ -64,12 +66,16 @@ void shoot_bullets()
 
 void bullets_spawn()
 {
-    if (enemy_bullet_count < MAX_ENEMY_BULLETS)
+    // For every score threshold reached, spawn additional bullets
+    for (int i = 0; i < bullets_to_spawn && enemy_bullet_count < MAX_ENEMY_BULLETS; i++)
     {
-        float random_pos_x = (float)(rand() % 800);             // Random x-position between 0 and 800
-        float random_velocity = 200.0f + (float)(rand() % 100); // Random velocity between 200 and 300
+        float random_pos_x = (float)(rand() % 800);
+        float base_velocity = 200.0f + (float)(rand() % 100);
 
-        enemy_bullets[enemy_bullet_count].position = (Vector2){random_pos_x, 5.0f}; // Start at the top of the screen
+        float velocity_increase = (bullets_to_spawn - 1) * 1.25f;
+        float random_velocity = base_velocity + velocity_increase;
+
+        enemy_bullets[enemy_bullet_count].position = (Vector2){random_pos_x, 5.0f};
         enemy_bullets[enemy_bullet_count].velocity = random_velocity;
 
         enemy_bullet_count++;
@@ -92,6 +98,11 @@ void update_bullets(float delta_time)
             continue;
         }
 
+        if (SCORE / score_threshold > (SCORE - 10) / score_threshold) // If the score crosses a multiple of 350
+        {
+            bullets_to_spawn++;
+        }
+
         // Check collision between player bullets and falling bullets
         for (int j = 0; j < enemy_bullet_count; j++)
         {
@@ -99,7 +110,6 @@ void update_bullets(float delta_time)
 
             if (collision)
             {
-                // Add points for destroyed bullet
                 SCORE += 10;
 
                 // Remove both bullets
@@ -254,6 +264,9 @@ int main()
                 player.shoot_cooldown = 0;
                 isGameOver = false;
                 SCORE = 0;
+
+                score_threshold = 350;
+                bullets_to_spawn = 10;
             }
         }
         else
